@@ -309,6 +309,8 @@ void putImage(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uin
 			}
 		}
 }
+
+
 void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t Colour)
 {
 	// Reference : https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm    
