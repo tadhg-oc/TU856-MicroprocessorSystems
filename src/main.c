@@ -1,6 +1,7 @@
 #include <stm32f031x6.h>
 #include "display.h"
 #include <stdlib.h> // random number generation
+#include <stdio.h> 
 
 void initClock(void);
 void initSysTick(void);
@@ -68,6 +69,8 @@ int main()
 		initSysTick();
 		setupIO();
 
+		start:
+
 		drawMainMenu();
 
 		while((GPIOB->IDR & (1 << 4)) != 0)
@@ -112,10 +115,8 @@ int main()
 				printTextX2("Game Over!", 5, 40, RGBToWord(255, 0, 0), RGBToWord(0, 0, 0));
 				printText("Final Score:", 15, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
 				printText(scoreText, 105, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
-				delay(200);
-				gameRunning = 0;
-				clear();
-				break;
+				delay(5000);
+				goto start;
 			}
 
 			wallY = wallY + 1;
@@ -210,7 +211,7 @@ int main()
 					
 				}
 			}
-			delay(25);
+			delay(45);
 		}
 		return 0;
 	}
