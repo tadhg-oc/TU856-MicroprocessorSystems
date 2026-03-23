@@ -1,5 +1,7 @@
 #include <stm32f031x6.h>
 #include "display.h"
+#include "sound.h" // for sound effects
+#include "musical_notes.h" // more complex sounds
 #include <stdlib.h> // random number generation
 #include <stdio.h> 
 
@@ -13,6 +15,12 @@ void enablePullUp(GPIO_TypeDef *Port, uint32_t BitNumber);
 void pinMode(GPIO_TypeDef *Port, uint32_t BitNumber, uint32_t Mode);
 
 volatile uint32_t milliseconds;
+
+const uint32_t scoreUpSound[] = {C4, E4, G4, C5};
+const uint32_t scoreUpLen[] = {200, 200, 200, 400};
+
+const uint32_t gameOverSound[] = {G4, F4, E4, D4, C4};
+const uint32_t gameOverLen[] = {300, 300, 300, 300, 500};
 
 const uint16_t slimeDefault[]=
 {
@@ -29,7 +37,7 @@ const uint16_t slimeUp[]=
 
 void drawMainMenu()
 {
-    uint16_t textColour = RGBToWord(255,255,150);
+    uint16_t textColour = RGBToWord(255,255,255);
     uint16_t bgColour = 0x0000;
 
     clear();
@@ -37,13 +45,25 @@ void drawMainMenu()
     printText("Slime Run", 33, 20, textColour, bgColour);
     printText("-- Main Menu --", 12, 30, textColour, bgColour);
 
-    printText("Right to Start", 15, 50, textColour, bgColour);
-    printText("Left for Sound On", 4, 70, textColour, bgColour);
+    printText("Right to Start", 15, 60, textColour, bgColour);
+
+	putImage(52, 110, 20, 20, slimeDefault, 0, 0);
 
     for (int x = 10; x < 118; x += 6)
     {
         fillRectangle(x, 90, 4, 2, textColour);
     }
+}
+
+void playSound(const uint32_t *notes, const uint32_t *duration, uint32_t length)
+{
+	for (uint32_t i = 0; i < length; i++)
+	{
+		playNote(notes[i]);
+		delay(duration[i]);
+		TIM14->CR1 &= ~(1 << 0);
+	}
+	
 }
 
 
@@ -55,12 +75,12 @@ int main()
 	int toggle = 0;
 	int hmoved = 0;
 	int vmoved = 0;
-	uint16_t x = 50;
-	uint16_t y = 50;
-	uint16_t oldx = x;
-	uint16_t oldy = y;
-	uint16_t delayTime = 5;
-	uint16_t score = 0;
+	int x = 50;
+	int y = 50;
+	int oldx = x;
+	int oldy = y;
+	int delayTime = 15;
+	int score = 0;
 
 
 	while(1)
@@ -68,19 +88,24 @@ int main()
 		initClock();
 		initSysTick();
 		setupIO();
+		initSound();
 
 		start:
 
-		drawMainMenu();
+		score = 0;
 
-		while((GPIOB->IDR & (1 << 4)) != 0)
-		{
-			// waiting for the Right button to be pressed: doing nothing until it is pressed
+		drawMainMenu();
+		
+		while ((GPIOB->IDR & (1 << 4)) != 0)
+		{	
+
 		}
 
 		delay(200);
 
 		clear();
+
+		int gameRunning = 1;
 
 		// Game Starts
 
@@ -92,8 +117,6 @@ int main()
 		uint16_t w1 = (random() % (128 - gap));
 		uint16_t x2 = w1 + gap;
 		uint16_t w2 = 128 - x2;
-
-		int gameRunning = 1;
 
 		while(gameRunning == 1)
 		{
@@ -115,6 +138,7 @@ int main()
 				printTextX2("Game Over!", 5, 40, RGBToWord(255, 0, 0), RGBToWord(0, 0, 0));
 				printText("Final Score:", 15, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
 				printText(scoreText, 105, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
+				playSound(gameOverSound, gameOverLen, sizeof(gameOverSound) / sizeof(gameOverSound[0])); // Play Game Over sound
 				delay(5000);
 				goto start;
 			}
@@ -123,6 +147,7 @@ int main()
 
 			if (wallY > 110)
 			{
+				playSound(scoreUpSound, scoreUpLen, sizeof(scoreUpSound) / sizeof(scoreUpSound[0]));
 				wallY = 0;
 				gap = 30; 
 				w1 = (random() % (128 - gap)); 
@@ -211,7 +236,7 @@ int main()
 					
 				}
 			}
-			delay(45);
+			delay(delayTime);
 		}
 		return 0;
 	}
