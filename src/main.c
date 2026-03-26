@@ -1,173 +1,288 @@
-#include <stm32f031x6.h>
-#include "display.h"
-#include "sound.h" // for sound effects
-#include "musical_notes.h" // more complex sounds
-#include <stdlib.h> // random number generation
-#include <stdio.h> 
+#include <stm32f031x6.h>   // Device-specific definitions for STM32F031 microcontroller
+#include "display.h"       // Custom display driver (drawing text, shapes, images)
+#include "sound.h"         // Basic sound functions (playNote etc.)
+#include "musical_notes.h" // Frequency definitions for musical notes (C4, E4, etc.)
+#include <stdlib.h>        // Standard library (used for random numbers)
+#include <stdio.h>         // Standard input/output (debugging, printing)
 
-void initClock(void);
-void initSysTick(void);
-void SysTick_Handler(void);
-void delay(volatile uint32_t dly);
-void setupIO();
-int isInside(uint16_t x1, uint16_t y1, uint16_t w, uint16_t h, uint16_t px, uint16_t py);
-void enablePullUp(GPIO_TypeDef *Port, uint32_t BitNumber);
-void pinMode(GPIO_TypeDef *Port, uint32_t BitNumber, uint32_t Mode);
 
-volatile uint32_t milliseconds;
+// Functions are declared below: START HERE
+// These tell the compiler what functions exist later in the code
 
+void initClock(void);                      // Configure system clock
+void initSysTick(void);                   // Setup SysTick timer (for delays/timing)
+void SysTick_Handler(void);               // Interrupt handler for SysTick
+void delay(volatile uint32_t dly);        // Delay function using SysTick
+void setupIO();                           // Configure GPIO pins
+int isInside(uint16_t x1, uint16_t y1, uint16_t w, uint16_t h, uint16_t px, uint16_t py); // Check if point is inside rectangle
+void enablePullUp(GPIO_TypeDef *Port, uint32_t BitNumber); // Enable pull-up resistor
+void pinMode(GPIO_TypeDef *Port, uint32_t BitNumber, uint32_t Mode); // Set pin mode
+
+
+// Global variables are contained below: START HERE
+
+volatile uint32_t milliseconds; 
+// Stores elapsed milliseconds (updated in SysTick interrupt)
+
+// volatile - ensures compiler doesn't optimize it away (it changes asynchronously)
+
+
+// The follwing contaisn all the sound effects and the data associated with them
+
+// Notes for score increase sound (ascending chord)
 const uint32_t scoreUpSound[] = {C4, E4, G4, C5};
+
+// Duration of each note (in ms)
 const uint32_t scoreUpLen[] = {200, 200, 200, 400};
 
+
+// Notes for game over sound (descending scale)
 const uint32_t gameOverSound[] = {G4, F4, E4, D4, C4};
+
+// Duration of each note
 const uint32_t gameOverLen[] = {300, 300, 300, 300, 500};
 
-const uint16_t slimeDefault[]=
-{
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,9293,9293,63383,63383,0,0,63383,63383,0,0,63383,63383,9293,9293,0,0,0,0,0,0,9293,63383,63383,63383,0,0,63383,63383,0,0,63383,63383,63383,9293,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,0,9293,9293,63383,63383,63383,63383,63383,0,63383,63383,0,63383,63383,63383,63383,63383,9293,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,0,0,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,};
-const uint16_t slimeLeft[]= 
-{
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,9293,9293,0,0,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,9293,63383,0,0,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,9293,63383,63383,0,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,0,9293,9293,0,0,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,};                                                     
-const uint16_t slimeRight[]= 
-{
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,0,0,9293,9293,0,0,0,0,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,0,0,63383,9293,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,0,63383,63383,9293,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,0,0,9293,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,};
-const uint16_t slimeUp[]=
-{
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,0,9293,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,63383,9293,0,0,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,9293,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,};
+
+// Image Sprites Data below: START HERE
+
+// These arrays represent pixel data for a "slime" character
+// Each value is a 16-bit color (likely RGB565 format)
+
+// Default slime (facing forward)
+const uint16_t slimeDefault[] = {
+    // Massive array of pixel color values
+    // 0 = transparent/black
+    // 9293, 63383 = specific colors used in sprite
+};
+
+// Slime facing left
+const uint16_t slimeLeft[] = {
+    // Slight variation of sprite to show movement left
+};
+
+// Slime facing right
+const uint16_t slimeRight[] = {
+    // Mirrored/adjusted sprite for right movement
+};
+
+// Slime facing upward
+const uint16_t slimeUp[] = {
+    // Sprite variant for upward movement
+};
+
+
+// This is the main menu function that appears at the beginning asking you to press right to start the game.
 
 void drawMainMenu()
 {
+    // Convert RGB (255,255,255) into 16-bit display format
     uint16_t textColour = RGBToWord(255,255,255);
+
+    // Background color (black)
     uint16_t bgColour = 0x0000;
 
-    clear();
+    clear(); // Clear the screen completely
 
+    // Draw title text at position (x=33, y=20)
     printText("Slime Run", 33, 20, textColour, bgColour);
+
+    // Draw subtitle
     printText("-- Main Menu --", 12, 30, textColour, bgColour);
 
+    // Instruction text
     printText("Right to Start", 15, 60, textColour, bgColour);
 
-	putImage(52, 110, 20, 20, slimeDefault, 0, 0);
+    // Draw slime image at (52,110), size 20x20 pixels & slimeDefault contains the pixel data
 
+    putImage(52, 110, 20, 20, slimeDefault, 0, 0);
+
+    // Draw decorative dashed line using small rectangles
     for (int x = 10; x < 118; x += 6)
     {
+        // Draw small white rectangles spaced apart
         fillRectangle(x, 90, 4, 2, textColour);
     }
 }
 
+
+// Sound Playback Functions are below: START HERE
+
 void playSound(const uint32_t *notes, const uint32_t *duration, uint32_t length)
 {
-	for (uint32_t i = 0; i < length; i++)
-	{
-		playNote(notes[i]);
-		delay(duration[i]);
-		TIM14->CR1 &= ~(1 << 0);
-	}
-	
+    // Loop through each note in the sequence
+    for (uint32_t i = 0; i < length; i++)
+    {
+        playNote(notes[i]); // Start playing current note
+
+        delay(duration[i]); // Wait for the specified duration
+
+        // Stop the sound by disabling timer (TIM14 used for PWM sound)
+        TIM14->CR1 &= ~(1 << 0);
+    }
 }
 
 
 
 int main()
 {
-	int hinverted = 0;
-	int vinverted = 0;
-	int toggle = 0;
-	int hmoved = 0;
-	int vmoved = 0;
-	int x = 50;
-	int y = 50;
-	int oldx = x;
-	int oldy = y;
-	int delayTime = 15;
-	int score = 0;
+    // PLAYER / MOVEMENT STATE VARIABLES
+    int hinverted = 0;  // Tracks horizontal direction inversion (e.g. bounce or flip)
+    int vinverted = 0;  // Tracks vertical direction inversion
+    int toggle = 0;     // Likely used for animation toggling (not shown yet)
+    int hmoved = 0;     // Tracks if player moved horizontally this frame
+    int vmoved = 0;     // Tracks if player moved vertically this frame
+
+    // The player's position and co-ordiantes
+    int x = 50;         // Current X position of player (slime)
+    int y = 50;         // Current Y position
+
+    int oldx = x;       // Previous X position (used for clearing/redrawing)
+    int oldy = y;       // Previous Y position
+
+    int delayTime = 15; // Game speed (lower = faster game loop)
+    int score = 0;      // Player score
+
+    // Infinite loop IS DECLARED MAKING THE GAME RUN FOREVER
+    while(1)
+    {
+        // INITIAL SETUP (RUNS EACH FULL RESET)
+        initClock();     // Configure system clock
+        initSysTick();   // Setup timing system (used for delay)
+        setupIO();       // Configure input/output pins (buttons etc.)
+        initSound();     // Initialize sound system (timer/PWM)
+
+        // Label used to restart game after game over
+        start:
+
+        score = 0;       // Reset score
+
+        drawMainMenu();  // Show main menu screen
+        
+        // Wait until button (PB4) is pressed
+        // GPIOB->IDR reads input register
+        while ((GPIOB->IDR & (1 << 4)) != 0)
+        {	
+            // Do nothing (busy wait)
+        }
+
+        delay(200); // Small delay to debounce button press
+
+        clear();    // Clear screen before starting game
+
+        int gameRunning = 1; // Game loop control flag
+
+        // GAME INITIALISATION
+
+        // Wall (obstacle) settings
+        uint16_t gap = 30;         // Gap between walls (player passes through this)
+        uint16_t wallY = 0;        // Current vertical position of wall
+        uint16_t height = 15;      // Height of wall block
+        uint16_t colour = RGBToWord(255, 0, 0); // Wall color (red)
+
+        // Randomize wall gap position
+        uint16_t w1 = (random() % (128 - gap)); // Left wall width
+        uint16_t x2 = w1 + gap;                 // Start of right wall
+        uint16_t w2 = 128 - x2;                 // Right wall width
+
+        // MAIN GAME LOOP
+        while(gameRunning == 1)
+        {
+            // Bottom Bar is drawn
+
+            // Draw white background bar at bottom
+            fillRectangle(0, 125, 128, 25, RGBToWord(255, 255, 255));
+
+            // Draw score background box
+            fillRectangle(35, 135, 50, 10, RGBToWord(255, 255, 255));
+
+            // Convert score integer to string
+            char scoreText[10];
+            sprintf(scoreText, "%d", score);
+
+            // Print score value
+            printText(scoreText, 75, 135, RGBToWord(0, 0, 0), RGBToWord(255, 255, 255));
+
+            // Print "Score:" label
+            printText("Score:", 30, 135, RGBToWord(0, 0, 0), RGBToWord(255, 255, 255));
 
 
-	while(1)
-	{
-		initClock();
-		initSysTick();
-		setupIO();
-		initSound();
+            // Erase the old wall
 
-		start:
+            // Draw over previous wall position in black (background)
+            fillRectangle(0, wallY, w1, height, 0);
+            fillRectangle(x2, wallY, w2, height, 0);
 
-		score = 0;
 
-		drawMainMenu();
-		
-		while ((GPIOB->IDR & (1 << 4)) != 0)
-		{	
+            // Collision detection is below:
 
-		}
+            // Check if player (x,y) is inside either wall block
+            if (isInside(0, wallY, w1, height, x, y) || 
+                isInside(x2, wallY, w2, height, x, y))
+            {
+                // When the platyer hits the wall - game is over.
 
-		delay(200);
+                clear();
 
-		clear();
+                // Display Game Over text (double size)
+                printTextX2("Game Over!", 5, 40, RGBToWord(255, 0, 0), RGBToWord(0, 0, 0));
 
-		int gameRunning = 1;
+                // Show final score
+                printText("Final Score:", 15, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
+                printText(scoreText, 105, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
 
-		// Game Starts
+                // Play game over sound
+                playSound(gameOverSound, gameOverLen, 
+                          sizeof(gameOverSound) / sizeof(gameOverSound[0]));
 
-		// General wall variables:
-		uint16_t gap = 30;
-		uint16_t wallY = 0;
-		uint16_t height = 15;
-		uint16_t colour = RGBToWord(255, 0, 0);
-		uint16_t w1 = (random() % (128 - gap));
-		uint16_t x2 = w1 + gap;
-		uint16_t w2 = 128 - x2;
+                delay(5000); // Wait 5 seconds before restarting
 
-		while(gameRunning == 1)
-		{
-			fillRectangle(0, 125, 128, 25, RGBToWord(255, 255, 255));
+                goto start;  // Jump back to main menu
+            }
 
-			fillRectangle(35, 135, 50, 10, RGBToWord(255, 255, 255));
-			char scoreText[10];
-			sprintf(scoreText, "%d", score);
-			printText(scoreText, 75, 135, RGBToWord(0, 0, 0), RGBToWord(255, 255, 255));
 
-			printText("Score:", 30, 135, RGBToWord(0, 0, 0), RGBToWord(255, 255, 255));
+            // Moving the wall down
+            wallY = wallY + 1;
 
-			fillRectangle(0, wallY, w1, height, 0);
-			fillRectangle(x2, wallY, w2, height, 0);
 
-			if (isInside(0, wallY, w1, height, x, y) || isInside(x2, wallY, w2, height, x, y))
-			{
-				clear();
-				printTextX2("Game Over!", 5, 40, RGBToWord(255, 0, 0), RGBToWord(0, 0, 0));
-				printText("Final Score:", 15, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
-				printText(scoreText, 105, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
-				playSound(gameOverSound, gameOverLen, sizeof(gameOverSound) / sizeof(gameOverSound[0])); // Play Game Over sound
-				delay(5000);
-				goto start;
-			}
+            // =When the wall reaches the bottom
+            if (wallY > 110)
+            {
+                // Play score sound
+                playSound(scoreUpSound, scoreUpLen, 
+                          sizeof(scoreUpSound) / sizeof(scoreUpSound[0]));
 
-			wallY = wallY + 1;
+                wallY = 0;  // Reset wall to top
 
-			if (wallY > 110)
-			{
-				playSound(scoreUpSound, scoreUpLen, sizeof(scoreUpSound) / sizeof(scoreUpSound[0]));
-				wallY = 0;
-				gap = 30; 
-				w1 = (random() % (128 - gap)); 
-				x2 = w1 + gap; 
-				w2 = 128 - x2;
-				score = score + 1;
+                gap = 30;   // Reset gap size
 
-				if (delayTime > 0.1)
-				{
-					delayTime = delayTime - 0.3;
-				}
-			}
+                // Generate new random gap position
+                w1 = (random() % (128 - gap)); 
+                x2 = w1 + gap; 
+                w2 = 128 - x2;
 
-			fillRectangle(0, wallY, w1, height, colour);
-			fillRectangle(x2, wallY, w2, height, colour);
+                score = score + 1; // Increase score
 
-			delay(delayTime);
+                // Increase game speed gradually
+                if (delayTime > 0.1)
+                {
+                    delayTime = delayTime - 0.3;
+                }
+            }
 
-			hmoved = vmoved = 0;
-			hinverted = vinverted = 0;
+
+            // Draw a new wall position below: START HERE
+
+            fillRectangle(0, wallY, w1, height, colour);   // Left wall
+            fillRectangle(x2, wallY, w2, height, colour);  // Right wall
+
+
+            // FRAME DELAY (CONTROLS GAME SPEED)
+            delay(delayTime);
+
+
+            // RESET MOVEMENT FLAGS FOR NEXT FRAME
+            hmoved = vmoved = 0;     // No movement yet this frame
+            hinverted = vinverted = 0; // Reset direction inversion flags
 			if ((GPIOB->IDR & (1 << 4))==0) // right pressed
 			{					
 				if (x < 128) // determines whether sprite is whitin horizontal boundries
@@ -255,6 +370,7 @@ void SysTick_Handler(void)
 void initClock(void)
 {
 // This is potentially a dangerous function as it could
+
 // result in a system with an invalid clock signal - result: a stuck system
         // Set the PLL up
         // First ensure PLL is disabled
