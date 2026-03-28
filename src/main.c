@@ -13,6 +13,16 @@ void setupIO();
 int isInside(uint16_t x1, uint16_t y1, uint16_t w, uint16_t h, uint16_t px, uint16_t py);
 void enablePullUp(GPIO_TypeDef *Port, uint32_t BitNumber);
 void pinMode(GPIO_TypeDef *Port, uint32_t BitNumber, uint32_t Mode);
+// Turn LEDs ON
+void RedOn()    { GPIOA->ODR |= (1 << 12); } // PA12
+void GreenOn()  { GPIOA->ODR |= (1 << 9);  } // PA9
+void YellowOn() { GPIOA->ODR |= (1 << 10); } // PA10
+
+// Turn LEDs OFF
+void RedOff()    { GPIOA->ODR &= ~(1 << 12); } // PA12
+void GreenOff()  { GPIOA->ODR &= ~(1 << 9);  } // PA9
+void YellowOff() { GPIOA->ODR &= ~(1 << 10); } // PA10
+
 
 volatile uint32_t milliseconds;
 
@@ -37,6 +47,7 @@ const uint16_t slimeUp[]=
 
 void drawMainMenu()
 {
+	GreenOn();
     uint16_t textColour = RGBToWord(255,255,255);
     uint16_t bgColour = 0x0000;
 
@@ -53,6 +64,7 @@ void drawMainMenu()
     {
         fillRectangle(x, 90, 4, 2, textColour);
     }
+	GreenOff();
 }
 
 void playSound(const uint32_t *notes, const uint32_t *duration, uint32_t length)
@@ -65,6 +77,19 @@ void playSound(const uint32_t *notes, const uint32_t *duration, uint32_t length)
 	}
 	
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -81,6 +106,12 @@ int main()
 	int oldy = y;
 	int delayTime = 15;
 	int score = 0;
+
+	//setting the pins as outputs 
+	// pin 9 for green 10 for yellow and 12 for red 
+	pinMode(GPIOA, 12, 1); // Red
+    pinMode(GPIOA, 9, 1); // Green
+    pinMode(GPIOA, 10, 1); // Yellow
 
 
 	while(1)
@@ -120,6 +151,7 @@ int main()
 
 		while(gameRunning == 1)
 		{
+			YellowOn();
 			fillRectangle(0, 125, 128, 25, RGBToWord(255, 255, 255));
 
 			fillRectangle(35, 135, 50, 10, RGBToWord(255, 255, 255));
@@ -134,13 +166,16 @@ int main()
 
 			if (isInside(0, wallY, w1, height, x, y) || isInside(x2, wallY, w2, height, x, y))
 			{
+				RedOn();
 				clear();
 				printTextX2("Game Over!", 5, 40, RGBToWord(255, 0, 0), RGBToWord(0, 0, 0));
 				printText("Final Score:", 15, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
 				printText(scoreText, 105, 90, RGBToWord(255, 255, 255), RGBToWord(0, 0, 0));
 				playSound(gameOverSound, gameOverLen, sizeof(gameOverSound) / sizeof(gameOverSound[0])); // Play Game Over sound
 				delay(5000);
+				RedOff();
 				goto start;
+
 			}
 
 			wallY = wallY + 1;
@@ -241,6 +276,21 @@ int main()
 		return 0;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 void initSysTick(void)
 {
 	SysTick->LOAD = 48000;

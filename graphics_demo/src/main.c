@@ -49,77 +49,28 @@ int main()
 	initClock();
 	initSysTick();
 	setupIO();
-	putImage(20,80,12,16,dg1,0,0);
-	while(1)
-	{
-		hmoved = vmoved = 0;
-		hinverted = vinverted = 0;
-		if ((GPIOB->IDR & (1 << 4))==0) // right pressed
-		{					
-			if (x < 110)
-			{
-				x = x + 1;
-				hmoved = 1;
-				hinverted=0;
-			}						
-		}
-		if ((GPIOB->IDR & (1 << 5))==0) // left pressed
-		{			
-			
-			if (x > 10)
-			{
-				x = x - 1;
-				hmoved = 1;
-				hinverted=1;
-			}			
-		}
-		if ( (GPIOA->IDR & (1 << 11)) == 0) // down pressed
-		{
-			if (y < 140)
-			{
-				y = y + 1;			
-				vmoved = 1;
-				vinverted = 0;
+	
+	fillRectangle(0, 0, 128, 160, RGBToWord(3,4,31));
+	printTextX2("WELCOME!", 10,20,RGBToWord(0xff,0xff,0), RGBToWord(3,4,31));
+	printText("To start, ", 10,50,RGBToWord(0xff,0xff,0), RGBToWord(3,4,31));
+	printText("Press any button!", 10,70,RGBToWord(0xff,0xff,0),RGBToWord(3,4,31));
+
+	//wait for a button to be pressed
+	//if any button is pressed, change background
+	while(1){
+
+		if((GPIOB->IDR & (1 << 4))==0 || (GPIOB->IDR & (1 << 5))==0 || (GPIOA->IDR & (1 << 11)) == 0 ||(GPIOA->IDR & (1 << 8)) == 0){
+			while(1){
+				//startGame()
+				fillRectangle(0, 0, 128, 160, RGBToWord(3,4,31));
 			}
 		}
-		if ( (GPIOA->IDR & (1 << 8)) == 0) // up pressed
-		{			
-			if (y > 16)
-			{
-				y = y - 1;
-				vmoved = 1;
-				vinverted = 1;
-			}
-		}
-		if ((vmoved) || (hmoved))
-		{
-			// only redraw if there has been some movement (reduces flicker)
-			fillRectangle(oldx,oldy,12,16,0);
-			oldx = x;
-			oldy = y;					
-			if (hmoved)
-			{
-				if (toggle)
-					putImage(x,y,12,16,deco1,hinverted,0);
-				else
-					putImage(x,y,12,16,deco2,hinverted,0);
-				
-				toggle = toggle ^ 1;
-			}
-			else
-			{
-				putImage(x,y,12,16,deco3,0,vinverted);
-			}
-			// Now check for an overlap by checking to see if ANY of the 4 corners of deco are within the target area
-			if (isInside(20,80,12,16,x,y) || isInside(20,80,12,16,x+12,y) || isInside(20,80,12,16,x,y+16) || isInside(20,80,12,16,x+12,y+16) )
-			{
-				printTextX2("GULG!", 10, 20, RGBToWord(0xff,0xff,0), 0);
-			}
-		}		
-		delay(50);
 	}
+	
 	return 0;
 }
+
+
 void initSysTick(void)
 {
 	SysTick->LOAD = 48000;
@@ -210,3 +161,91 @@ void setupIO()
 	enablePullUp(GPIOA,11);
 	enablePullUp(GPIOA,8);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*while(1)
+	{
+		hmoved = vmoved = 0;
+		hinverted = vinverted = 0;
+		if ((GPIOB->IDR & (1 << 4))==0) // right pressed
+		{					
+			if (x < 110)
+			{
+				x = x + 1;
+				hmoved = 1;
+				hinverted=0;
+			}						
+		}
+		if ((GPIOB->IDR & (1 << 5))==0) // left pressed
+		{			
+			
+			if (x > 10)
+			{
+				x = x - 1;
+				hmoved = 1;
+				hinverted=1;
+			}			
+		}
+		if ( (GPIOA->IDR & (1 << 11)) == 0) // down pressed
+		{
+			if (y < 140)
+			{
+				y = y + 1;			
+				vmoved = 1;
+				vinverted = 0;
+			}
+		}
+		if ( (GPIOA->IDR & (1 << 8)) == 0) // up pressed
+		{			
+			if (y > 16)
+			{
+				y = y - 1;
+				vmoved = 1;
+				vinverted = 1;
+			}
+		}
+		if ((vmoved) || (hmoved))
+		{
+			// only redraw if there has been some movement (reduces flicker)
+			fillRectangle(oldx,oldy,12,16,0);
+			oldx = x;
+			oldy = y;					
+			if (hmoved)
+			{
+				if (toggle)
+					putImage(x,y,12,16,deco1,hinverted,0);
+				else
+					putImage(x,y,12,16,deco2,hinverted,0);
+				
+				toggle = toggle ^ 1;
+			}
+			else
+			{
+				putImage(x,y,12,16,deco3,0,vinverted);
+			}
+			// Now check for an overlap by checking to see if ANY of the 4 corners of deco are within the target area
+			if (isInside(20,80,12,16,x,y) || isInside(20,80,12,16,x+12,y) || isInside(20,80,12,16,x,y+16) || isInside(20,80,12,16,x+12,y+16) )
+			{
+				printText("Emmanuel", 10, 20, RGBToWord(0xff,0xff,0), 0);
+			}
+		}		
+		delay(50);
+	}*/
