@@ -3,7 +3,13 @@
 #include "sound.h" // for sound effects
 #include "musical_notes.h" // more complex sounds
 #include <stdlib.h> // random number generation
-#include <stdio.h> 
+#include <stdio.h>
+#include "usbh_core.h"
+#include "usbh_hid.h"
+#include "usbh_hid_keybd.h"
+
+USBH_HandleTypeDef hUSBHost;
+HID_KEYBD_Info_TypeDef *kb_info;
 
 void initClock(void);
 void initSysTick(void);
@@ -63,10 +69,26 @@ void playSound(const uint32_t *notes, const uint32_t *duration, uint32_t length)
 		delay(duration[i]);
 		TIM14->CR1 &= ~(1 << 0);
 	}
-	
 }
 
+void setupKeyboard(void)
+{
+    USBH_Init(&hUSBHost, USBH_UserProcess, 0);
+    USBH_RegisterClass(&hUSBHost, USBH_HID_CLASS);
+    USBH_Start(&hUSBHost);
+}
 
+void USBH_UserProcess(USBH_HandleTypeDef *phost, uint8_t id)
+{
+    switch(id)
+    {
+        case HOST_USER_SELECT_CONFIGURATION:
+        case HOST_USER_DISCONNECTION:
+        case HOST_USER_CLASS_ACTIVE:
+        case HOST_USER_CONNECTION:
+            break;
+    }
+}
 
 int main()
 {
@@ -82,14 +104,14 @@ int main()
 	int delayTime = 15;
 	int score = 0;
 
+	initClock();
+	initSysTick();
+	setupIO();
+	setupKeyboard();
+	initSound();
 
 	while(1)
 	{
-		initClock();
-		initSysTick();
-		setupIO();
-		initSound();
-
 		start:
 
 		score = 0;
@@ -97,8 +119,11 @@ int main()
 		drawMainMenu();
 		
 		while ((GPIOB->IDR & (1 << 4)) != 0)
-		{	
-
+		{
+			USBH_Process(&hUSBHost);
+			kb_info = USBH_HID_GetKeybdInfo(&hUSBHost);
+			if (kb_info != NULL && kb_info->keys[0] == HID_KEYBOARD_ARROW_RIGHT)
+				break;
 		}
 
 		delay(200);
@@ -168,43 +193,56 @@ int main()
 
 			hmoved = vmoved = 0;
 			hinverted = vinverted = 0;
+
+			// GPIO buttons
 			if ((GPIOB->IDR & (1 << 4))==0) // right pressed
 			{					
-				if (x < 128) // determines whether sprite is whitin horizontal boundries
+				if (x < 128)
 				{
-					x = x + 1; // verification for horizontal boundary
-					hmoved = 1; // shows horizontal movement
-					hinverted=0; // shows which horizontal direction 
+					x = x + 1;
+					hmoved = 1;
+					hinverted=0;
 				}						
 			}
 			if ((GPIOB->IDR & (1 << 5))==0) // left pressed
 			{			
-				
-				if (x > 0) // determines whether sprite is whitin horizontal boundries
+				if (x > 0)
 				{
-					x = x - 1; // verification for horizontal boundary
-					hmoved = 1; // shows horizontal movement
-					hinverted=1; // shows which horizontal direction
+					x = x - 1;
+					hmoved = 1;
+					hinverted=1;
 				}			
 			}
 			if ( (GPIOA->IDR & (1 << 11)) == 0) // down pressed
 			{
 				if (y < 125)
 				{
-					y = y + 1; // verification for vertical boundary
-					vmoved = 1; // shows vertical movement
-					vinverted = 0; // shows which vertical direction
+					y = y + 1;
+					vmoved = 1;
+					vinverted = 0;
 				}
 			}
 			if ( (GPIOA->IDR & (1 << 8)) == 0) // up pressed
 			{			
 				if (y > 15)
 				{
-					y = y - 1; // verification for vertical boundary
-					vmoved = 1; // shows vertical movement
-					vinverted = 1; // shows which vertical direction
+					y = y - 1;
+					vmoved = 1;
+					vinverted = 1;
 				}
 			}
+
+			// USB keyboard
+			USBH_Process(&hUSBHost);
+			kb_info = USBH_HID_GetKeybdInfo(&hUSBHost);
+			if (kb_info != NULL)
+			{
+				if (kb_info->keys[0] == HID_KEYBOARD_ARROW_RIGHT && x < 128) { x = x + 1; hmoved = 1; hinverted = 0; }
+				if (kb_info->keys[0] == HID_KEYBOARD_ARROW_LEFT  && x > 0)   { x = x - 1; hmoved = 1; hinverted = 1; }
+				if (kb_info->keys[0] == HID_KEYBOARD_ARROW_DOWN  && y < 125) { y = y + 1; vmoved = 1; vinverted = 0; }
+				if (kb_info->keys[0] == HID_KEYBOARD_ARROW_UP    && y > 15)  { y = y - 1; vmoved = 1; vinverted = 1; }
+			}
+
 			if ((vmoved) || (hmoved))
 			{
 				// only redraw if there has been some movement (reduces flicker)
@@ -254,30 +292,16 @@ void SysTick_Handler(void)
 }
 void initClock(void)
 {
-// This is potentially a dangerous function as it could
-// result in a system with an invalid clock signal - result: a stuck system
-        // Set the PLL up
-        // First ensure PLL is disabled
         RCC->CR &= ~(1u<<24);
-        while( (RCC->CR & (1 <<25))); // wait for PLL ready to be cleared
+        while( (RCC->CR & (1 <<25)));
         
-// Warning here: if system clock is greater than 24MHz then wait-state(s) need to be
-// inserted into Flash memory interface
-				
         FLASH->ACR |= (1 << 0);
         FLASH->ACR &=~((1u << 2) | (1u<<1));
-        // Turn on FLASH prefetch buffer
         FLASH->ACR |= (1 << 4);
-        // set PLL multiplier to 12 (yielding 48MHz)
         RCC->CFGR &= ~((1u<<21) | (1u<<20) | (1u<<19) | (1u<<18));
         RCC->CFGR |= ((1<<21) | (1<<19) ); 
-
-        // Need to limit ADC clock to below 14MHz so will change ADC prescaler to 4
         RCC->CFGR |= (1<<14);
-
-        // and turn the PLL back on again
         RCC->CR |= (1<<24);        
-        // set PLL as system clock source 
         RCC->CFGR |= (1<<1);
 }
 void delay(volatile uint32_t dly)
@@ -289,13 +313,11 @@ void delay(volatile uint32_t dly)
 
 void enablePullUp(GPIO_TypeDef *Port, uint32_t BitNumber)
 {
-	Port->PUPDR = Port->PUPDR &~(3u << BitNumber*2); // clear pull-up resistor bits
-	Port->PUPDR = Port->PUPDR | (1u << BitNumber*2); // set pull-up bit
+	Port->PUPDR = Port->PUPDR &~(3u << BitNumber*2);
+	Port->PUPDR = Port->PUPDR | (1u << BitNumber*2);
 }
 void pinMode(GPIO_TypeDef *Port, uint32_t BitNumber, uint32_t Mode)
 {
-	/*
-	*/
 	uint32_t mode_value = Port->MODER;
 	Mode = Mode << (2 * BitNumber);
 	mode_value = mode_value & ~(3u << (BitNumber * 2));
