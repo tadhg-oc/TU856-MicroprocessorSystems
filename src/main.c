@@ -1,9 +1,14 @@
 // Headers:
 #include <stm32f031x6.h> // STM32F031x6 microcontroller-specific definitions
+#include "stm32f0xx.h"
 #include "display.h" // Display functions
 #include "sound.h" // For sound effects
 #include "musical_notes.h" // For more complex sounds
 #include <stdlib.h> // For random number generation
+
+
+
+
 
 // Function prototypes
 void initClock(void); // Initialize the system clock
@@ -11,9 +16,13 @@ void initSysTick(void); // Initialize the SysTick timer
 void SysTick_Handler(void); // SysTick interrupt handler
 void delay(volatile uint32_t dly); // Delay function
 void setupIO(); // Setup GPIO pins
+void initUSART();//initialize the usart clock and pins
 int isInside(uint16_t x1, uint16_t y1, uint16_t w, uint16_t h, uint16_t px, uint16_t py); // Check if a point is inside a rectangle
 void enablePullUp(GPIO_TypeDef *Port, uint32_t BitNumber); // Enable pull-up resistor for a GPIO pin
 void pinMode(GPIO_TypeDef *Port, uint32_t BitNumber, uint32_t Mode); // Set GPIO pin mode
+
+
+
 
 // Global variable to track milliseconds (used for delays)
 volatile uint32_t milliseconds;
@@ -97,6 +106,57 @@ void playSound(const uint32_t *notes, const uint32_t *duration, uint32_t length)
     }
 }
 
+void USART1_SendChar(char c)
+{
+    while (!(USART1->ISR & (1 << 7))) 
+    {
+        // wait until TXE (Transmit Data Register Empty)
+    }
+
+    USART1->TDR = c;
+}
+
+void USART1_SendString(char *str)
+{
+    while (*str)
+    {
+        USART1_SendChar(*str++);
+    }
+}
+
+void USART1_SendInt(int num)
+{
+    char buffer[12];
+    int i = 0;
+
+    if (num == 0)
+    {
+        USART1_SendChar('0');
+        return;
+    }
+
+    if (num < 0)
+    {
+        USART1_SendChar('-');
+        num = -num;
+    }
+
+    while (num > 0)
+    {
+        buffer[i++] = (num % 10) + '0';
+        num /= 10;
+    }
+
+    while (i--)
+    {
+        USART1_SendChar(buffer[i]);
+    }
+}
+
+
+
+
+
 int main()
 {
     // Initialize game variables
@@ -116,6 +176,7 @@ int main()
     initClock();
     initSysTick();
     setupIO();
+	initUSART();   // UART setup
     initLED();
     initSound();
 
@@ -137,6 +198,7 @@ int main()
         clear(); // Clear the screen for the game
 
         int gameRunning = 1; // Game running flag
+        int lastScore = -1; //USART flag
 
         // Initialize wall variables
         uint16_t gap = 30; // Gap between walls
@@ -271,6 +333,15 @@ int main()
                     }
                 }
             }
+            
+            if (score != lastScore)
+            {
+                USART1_SendString("Score: ");
+                USART1_SendInt(score);
+                USART1_SendString("\r\n");
+                lastScore = score;
+            }
+
             delay(delayTime); // Add a delay for the frame update
         }
         return 0; // End of the program
@@ -346,7 +417,7 @@ int isInside(uint16_t x1, uint16_t y1, uint16_t w, uint16_t h, uint16_t px, uint
 // Setup GPIO pins for the game
 void setupIO()
 {
-    RCC->AHBENR |= (1 << 18) + (1 << 17); // Enable GPIOA and GPIOB clocks
+    RCC->AHBENR |= (1 << 18) | (1 << 17); // Enable GPIOA and GPIOB clocks (was "+" changed it to "|")
     display_begin(); // Initialize the display
 
     // Configure GPIO pins as input
@@ -360,4 +431,56 @@ void setupIO()
     enablePullUp(GPIOB, 5); // Enable pull-up for GPIOB pin 5
     enablePullUp(GPIOA, 8); // Enable pull-up for GPIOA pin 8
     enablePullUp(GPIOA, 11); // Enable pull-up for GPIOA pin 11
+}
+void initUSART()
+{
+    // ==================================================
+    // STEP 1: Enable clocks (BIT MANIPULATION ONLY)
+    // ==================================================
+
+    // GPIOA clock enable (IOPAEN = bit 17 in AHBENR)
+    RCC->AHBENR |= (1 << 17);
+
+    // USART1 clock enable (USART1EN = bit 14 in APB2ENR for STM32F0)
+    RCC->APB2ENR |= (1 << 14);
+
+    // ==================================================
+    // STEP 2: Configure PA9 (TX) and PA10 (RX)
+    // ==================================================
+
+    // Set PA9 to Alternate Function (10)
+    GPIOA->MODER &= ~(3U << (9 * 2));
+    GPIOA->MODER |=  (2U << (9 * 2));
+
+    // Set PA10 to Alternate Function (10)
+    GPIOA->MODER &= ~(3U << (10 * 2));
+    GPIOA->MODER |=  (2U << (10 * 2));
+
+    // Set AF1 (USART1) for PA9
+    GPIOA->AFR[1] &= ~(0xFU << ((9 - 8) * 4));
+    GPIOA->AFR[1] |=  (1U << ((9 - 8) * 4));
+
+    // Set AF1 (USART1) for PA10
+    GPIOA->AFR[1] &= ~(0xFU << ((10 - 8) * 4));
+    GPIOA->AFR[1] |=  (1U << ((10 - 8) * 4));
+
+    // ==================================================
+    // STEP 3: Configure USART1
+    // ==================================================
+
+    // Disable USART before configuration (UE = bit 0)
+    USART1->CR1 &= ~(1 << 0);
+
+    // Set baud rate (assuming 48 MHz clock)
+    // BRR = fclk / baud
+    USART1->BRR = 48000000 / 9600;
+
+    // Enable transmitter (TE = bit 3)
+    USART1->CR1 |= (1 << 3);
+
+    // Enable receiver (RE = bit 2)
+    USART1->CR1 |= (1 << 2);
+
+    // Enable USART (UE = bit 0)
+    USART1->CR1 |= (1 << 0);
 }
